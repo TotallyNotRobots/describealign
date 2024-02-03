@@ -77,7 +77,11 @@ if IS_RUNNING_WINDOWS:
   default_output_dir = 'videos_with_ad'
   default_alignment_dir = 'alignment_plots'
 else:
-  import PySimpleGUIQt as sg
+  try:
+    import PySimpleGUIQt as sg
+  except ImportError:
+    sg = None
+
   default_output_dir = os.path.expanduser('~') + '/videos_with_ad'
   default_alignment_dir = os.path.expanduser('~') + '/alignment_plots'
 
@@ -1180,7 +1184,7 @@ def command_line_interface():
   # this allows users to see the error message when accidentally not running from command line
   class ArgumentParser(argparse.ArgumentParser):
     def error(self, message):
-      if 'required: video, audio' in message:
+      if 'required: video, audio' in message and sg is not None:
         print('No input arguments detected, starting GUI...')
         main_gui()
         self.exit()
