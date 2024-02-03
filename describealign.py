@@ -23,6 +23,25 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 '''
+import argparse
+import configparser
+import glob
+import itertools
+import multiprocessing
+import os
+import platform
+import traceback
+
+import ffmpeg
+import numpy as np
+import python_speech_features as psf
+import pytsmod
+import scipy.interpolate
+import scipy.ndimage as nd
+import scipy.optimize
+import scipy.signal
+import scipy.sparse
+import static_ffmpeg
 
 VIDEO_EXTENSIONS = set(['mp4', 'mkv', 'avi', 'mov', 'webm', 'm4v', 'flv', 'vob'])
 AUDIO_EXTENSIONS = set(['mp3', 'm4a', 'opus', 'wav', 'aac', 'flac', 'ac3', 'mka'])
@@ -51,25 +70,6 @@ CATCHUP_RATE = 5
 
 if PLOT_ALIGNMENT_TO_FILE:
   import matplotlib.pyplot as plt
-import argparse
-import os
-import glob
-import itertools
-import datetime
-import numpy as np
-import ffmpeg
-import static_ffmpeg
-import python_speech_features as psf
-import scipy.signal
-import scipy.optimize
-import scipy.interpolate
-import scipy.ndimage as nd
-import scipy.sparse
-import pytsmod
-import configparser
-import traceback
-import multiprocessing
-import platform
 
 IS_RUNNING_WINDOWS = platform.system() == 'Windows'
 if IS_RUNNING_WINDOWS:
@@ -1215,7 +1215,3 @@ def command_line_interface():
 if __name__ == "__main__":
   multiprocessing.freeze_support()
   command_line_interface()
-
-
-
-
