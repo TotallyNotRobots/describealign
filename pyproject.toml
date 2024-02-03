@@ -1,0 +1,95 @@
+[tool.poetry]
+name = "describealign"
+version = "1.0.8"
+description = "Combines videos with matching audio files (e.g. audio descriptions)"
+authors = [
+    "Julian Brown <julbean@proton.me>",
+    "linuxdaemon <linuxdaemon.irc@gmail.com>",
+]
+license = "GPLv3"
+
+[tool.poetry.dependencies]
+python = "^3.9,<3.11"
+ffmpeg_python = ">=0.2.0"
+static-ffmpeg = ">=2.5"
+matplotlib = ">=3.5.0"
+numpy = ">=1.21.4"
+python_speech_features = ">=0.6"
+scipy = ">=1.10.1"
+pytsmod = ">=0.3.7"
+PySimpleGUIWx = { version = "0.17.2", markers = "sys_platform == 'windows'" }
+PySimpleGUIQt = { version = ">=0.35.0", markers = "sys_platform != 'windows'" }
+
+[tool.poetry.dev-dependencies]
+pylint = "^3.0.3"
+pre-commit = "^3.6.0"
+flake8 = "^7.0.0"
+mypy = "^1.8.0"
+darker = { extras = ["flynt", "isort"], version = "^1.7.2" }
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.isort]
+line_length = 80
+multi_line_output = 3
+include_trailing_comma = true
+use_parentheses = true
+known_first_party = ["describealign"]
+float_to_top = true
+
+[tool.black]
+line-length = 80
+target-version = ['py39']
+include = '\.pyi?$'
+exclude = '''
+(
+  /(
+      \.eggs         # exclude a few common directories in the
+    | \.git          # root of the project
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | buck-out
+    | build
+    | dist
+    | venv
+  )/
+)
+'''
+
+[tool.darker]
+src = ["indexer", "tests"]
+flynt = true
+isort = true
+black = true
+lint = ["flake8", "mypy", "pylint"]
+line-length = 80
+
+[tool.pylint.main]
+analyse-fallback-blocks = true
+py-version = "3.9"
+extension-pkg-allow-list = ["lxml"]
+
+[tool.pylint.messages_control]
+disable = ["missing-docstring"]
+enable = ["c-extension-no-member"]
+
+[tool.pylint.typecheck]
+generated-members = "(requests\\.)?codes\\.[a-zA-Z0-9_]+"
+
+[tool.mypy]
+namespace_packages = true
+python_version = "3.9"
+warn_unused_configs = true
+strict = true
+strict_optional = true
+ignore_missing_imports = true
+check_untyped_defs = true
+show_error_codes = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+strict_equality = true
