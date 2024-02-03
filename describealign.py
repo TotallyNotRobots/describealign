@@ -752,6 +752,7 @@ def get_closest_key_frame_time(video_file, time):
 # outputs a new media file with the replaced audio (which includes audio descriptions)
 def write_replaced_media_to_disk(output_filename, media_arr, video_file=None, audio_desc_file=None,
                                  setts_cmd=None, start_key_frame=None):
+  print("Writing output file")
   if audio_desc_file is None:
     media_input = ffmpeg.input('pipe:', format='s16le', acodec='pcm_s16le',
                                ac=2, ar=AUDIO_SAMPLE_RATE)
@@ -807,6 +808,8 @@ def write_replaced_media_to_disk(output_filename, media_arr, video_file=None, au
       ffmpeg_caller2.stdin.close()
       ffmpeg_caller.wait()
       ffmpeg_caller2.wait()
+
+  print("Output written")
 
 
 # check whether static_ffmpeg has already installed ffmpeg and ffprobe
@@ -877,20 +880,30 @@ def combine(video, audio, smoothness=50, stretch_audio=False, keep_non_ad=False,
       display("   output file already exists, skipping...", display_func)
       continue
 
+    print("Parsing audio from video input")
     video_arr = parse_audio_from_file(video_file)
+    print("Parsing new audio track")
     audio_desc_arr = parse_audio_from_file(audio_desc_file)
+    print("Tokenizing video audio track")
     video_spec_raw, video_timings = tokenize_audio(video_arr)
+    print("Normalizing video file audio spec")
     video_spec = normalize_spec(video_spec_raw)
+    print("Tokenizing new audio track")
     audio_desc_spec_raw, audio_desc_timings = tokenize_audio_dither(audio_desc_arr, video_timings)
+    print("Normalizing new audio track spec")
     audio_desc_spec = normalize_spec(audio_desc_spec_raw)
 
+    print("Rescaling RMS intensity")
     # rescale RMS intensity of audio to match video
     audio_desc_arr *= (np.std(video_arr) / np.std(audio_desc_arr))
 
+    print("Running rough alignment")
     path, quals = rough_align(video_spec, audio_desc_spec, video_timings, audio_desc_timings)
 
+    print("Running smooth alignment")
     smooth_path, runs, bad_clips, clips = smooth_align(path, quals, smoothness)
 
+    print("Capping synced endpoints")
     cap_synced_end_points(smooth_path, video_arr, audio_desc_arr)
 
     ad_timings = None
@@ -898,14 +911,17 @@ def combine(video, audio, smoothness=50, stretch_audio=False, keep_non_ad=False,
       if keep_non_ad:
         video_arr_original = video_arr.copy()
 
+      print("Replacing aligned segments")
       replace_aligned_segments(video_arr, audio_desc_arr, smooth_path, runs, no_pitch_correction)
       del audio_desc_arr
 
       if keep_non_ad or boost != 0:
+        print("Detecting describer audio")
         outputs = detect_describer(video_arr, video_spec, video_spec_raw, video_timings,
                                    smooth_path, ad_detect_sensitivity, boost_sensitivity)
         speech_sample_mask, boost_sample_mask, ad_timings = outputs
       if keep_non_ad:
+        print("Applying sample masks")
         video_arr *= speech_sample_mask
         video_arr += video_arr_original * (1 - speech_sample_mask)
         del video_arr_original
@@ -913,10 +929,12 @@ def combine(video, audio, smoothness=50, stretch_audio=False, keep_non_ad=False,
       else:
         ad_timings = None
       if boost != 0:
+        print("Applying boost")
         video_arr = video_arr * (1. + (10**(boost / 10.) - 1.) * boost_sample_mask)
         del boost_sample_mask
 
       # prevent peaking by rescaling to within +/- 16,382
+      print("Removing peaking audio")
       video_arr *= (2**15 - 2.) / np.max(np.abs(video_arr))
 
       if video_filetype == 0:
@@ -928,8 +946,11 @@ def combine(video, audio, smoothness=50, stretch_audio=False, keep_non_ad=False,
         raise RuntimeError("Argument --stretch_audio is required when both inputs are audio files.")
       if os.path.splitext(output_filename)[1][1:] in AUDIO_EXTENSIONS:
         raise RuntimeError("Argument --stretch_audio is required when output file extension is an audio filetype.")
+      print("Getting video offset")
       video_offset = np.diff(smooth_path[clips[0][0]])[0]
+      print("Getting starting keyframe")
       start_key_frame = get_closest_key_frame_time(video_file, video_offset)
+      print("Encoding fit expression")
       setts_cmd = encode_fit_as_ffmpeg_expr(smooth_path, clips, video_offset, start_key_frame)
       write_replaced_media_to_disk(output_filename, None, video_file, audio_desc_file,
                                    setts_cmd, start_key_frame)
