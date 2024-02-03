@@ -8,6 +8,9 @@ authors = [
 ]
 license = "GPLv3"
 
+[tool.poetry.scripts]
+describealign = "describealign.main:main"
+
 [tool.poetry.dependencies]
 python = "^3.9,<3.11"
 ffmpeg_python = ">=0.2.0"
@@ -62,7 +65,7 @@ exclude = '''
 '''
 
 [tool.darker]
-src = ["indexer", "tests"]
+src = ["describealign"]
 flynt = true
 isort = true
 black = true
