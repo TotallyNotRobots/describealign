@@ -18,12 +18,12 @@ jobs:
           architecture: "x64" # optional x64 or x86. Defaults to x64 if not specified
           cache: "pip"
           cache-dependency-path: |
-            **/requirements*.txt
+            **/*requirements*.txt
 
       - name: Install Dependencies
         run: |
           pip install -U pip wheel
-          pip install -Ur requirements.txt
+          pip install -Ur build-requirements.txt
 
       - name: Build Dists
         run: python3 -m build
