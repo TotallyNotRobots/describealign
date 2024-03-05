@@ -2,7 +2,10 @@ name: Release
 on: workflow_dispatch
 
 jobs:
+  build:
+    uses: ./.github/workflows/build-binary.yaml
   release:
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Download all workflow run artifacts
