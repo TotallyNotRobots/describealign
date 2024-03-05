@@ -10,4 +10,4 @@ jobs:
     steps:
       - name: Download all workflow run artifacts
         uses: actions/download-artifact@v4
-      - run: ls
+      - run: ls -R
