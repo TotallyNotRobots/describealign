@@ -23,7 +23,7 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install -U pip wheel
-          pip install -Ur build-requirements.txt
+          pip install -Ur dist-requirements.txt
 
       - name: Build Dists
         run: python3 -m build
