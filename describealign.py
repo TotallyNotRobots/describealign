@@ -53,11 +53,13 @@ if PLOT_ALIGNMENT_TO_FILE:
   import matplotlib.pyplot as plt
 import argparse
 from contextlib import redirect_stderr, redirect_stdout
+import contextlib
 import io
 import os
 import glob
 import itertools
 from pathlib import Path
+import subprocess
 import sys
 from typing import Optional
 import numpy as np
@@ -709,6 +711,52 @@ def detect_describer(video_arr, video_spec, video_spec_raw, video_timings,
   
   return speech_sample_mask, boost_sample_mask, ad_timings
 
+def popen_wrapper(args, **kwargs):
+  # The following is true only on Windows.
+  if hasattr(subprocess, 'STARTUPINFO'):
+    # On Windows, subprocess calls will pop up a command window by default
+    # when run from Pyinstaller with the ``--noconsole`` option. Avoid this
+    # distraction.
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    # Windows doesn't search the path by default. Pass it an environment so
+    # it will.
+    env = os.environ
+  else:
+    si = None
+    env = None
+  
+  # On Windows, running this from the binary produced by Pyinstaller
+  # with the ``--noconsole`` option requires redirecting everything
+  # (stdin, stdout, stderr) to avoid an OSError exception
+  # "[Error 6] the handle is invalid."
+  new_kwargs = {
+    'stdin': subprocess.PIPE,
+    'stdout': subprocess.PIPE,
+    'stderr': subprocess.PIPE,
+    'startupinfo': si,
+    'env': env,
+  }
+  
+  # Add values where one isn't already set
+  for k, v in new_kwargs.items():
+    if k in kwargs and kwargs[k] is not None:
+      # It is set and not to None, don't override
+      continue
+    
+    kwargs[k] = v
+  
+  return subprocess.Popen(args, **kwargs)
+
+@contextlib.contextmanager
+def patch_popen():
+  _old_popen = subprocess.Popen
+  subprocess.Popen = popen_wrapper
+  try:
+    yield
+  finally:
+    subprocess.Popen = _old_popen
+
 # Convert piece-wise linear fit to ffmpeg expression for editing video frame timestamps
 def encode_fit_as_ffmpeg_expr(smooth_path, clips, video_offset, start_key_frame):
   # PTS is the input frame's presentation timestamp, which is when frames are displayed
@@ -1074,7 +1122,7 @@ def combine_gui(video_files, audio_files, config_path):
             [sg.Button('Close', pad=(360,5))]]
   combine_window = sg.Window('Combining - describealign', layout, font=('Arial', 16),
                              disable_close=True, finalize=True)
-  output_textbox.update('Combining media files:', append=True)
+  output_textbox.update('Combining media files:\n', append=True)
   print_queue = multiprocessing.Queue()
   
   settings = read_config_file(config_path)
@@ -1090,7 +1138,8 @@ def combine_gui(video_files, audio_files, config_path):
     if not print_queue.empty():
       if IS_RUNNING_WINDOWS:
         cursor_position = output_textbox.WxTextCtrl.GetInsertionPoint()
-      output_textbox.update(print_queue.get(), append=True)
+      while not print_queue.empty():
+          output_textbox.update(print_queue.get(), append=True)
       if IS_RUNNING_WINDOWS:
         output_textbox.WxTextCtrl.SetInsertionPoint(cursor_position)
     event, values = combine_window.read(timeout=100)
@@ -1277,9 +1326,15 @@ def command_line_interface():
 # allows the script to be run on its own, rather than through the package, for example:
 # python3 describealign.py video.mp4 audio_desc.mp3
 if __name__ == "__main__":
-  multiprocessing.freeze_support()
-  command_line_interface()
-
-
-
-
+  ### DANGER ###
+  ## This is super hacky and I never recommend doing this, it will likely break.
+  ## This is the only option until we replace `ffmpeg_python`, it is updated (unlikely), or some third thing
+  with patch_popen():
+    # At this point, subprocess.Popen has been replaced with a wrapper
+    # If something breaks in a subprocess, first disable this context manager and test again.
+    
+    # Allow multiprocessing to run this binary again to run functions in subprocesses
+    multiprocessing.freeze_support()
+    
+    # Run the CLI
+    command_line_interface()
