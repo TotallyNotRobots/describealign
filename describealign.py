@@ -54,6 +54,7 @@ if PLOT_ALIGNMENT_TO_FILE:
 import argparse
 from contextlib import redirect_stderr, redirect_stdout
 import contextlib
+import functools
 import io
 import os
 import glob
@@ -711,46 +712,48 @@ def detect_describer(video_arr, video_spec, video_spec_raw, video_timings,
   
   return speech_sample_mask, boost_sample_mask, ad_timings
 
-def popen_wrapper(args, **kwargs):
-  # The following is true only on Windows.
-  if hasattr(subprocess, 'STARTUPINFO'):
-    # On Windows, subprocess calls will pop up a command window by default
-    # when run from Pyinstaller with the ``--noconsole`` option. Avoid this
-    # distraction.
-    si = subprocess.STARTUPINFO()
-    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    # Windows doesn't search the path by default. Pass it an environment so
-    # it will.
-    env = os.environ
-  else:
-    si = None
-    env = None
-  
-  # On Windows, running this from the binary produced by Pyinstaller
-  # with the ``--noconsole`` option requires redirecting everything
-  # (stdin, stdout, stderr) to avoid an OSError exception
-  # "[Error 6] the handle is invalid."
-  new_kwargs = {
-    'stdin': subprocess.PIPE,
-    'stdout': subprocess.PIPE,
-    'stderr': subprocess.PIPE,
-    'startupinfo': si,
-    'env': env,
-  }
-  
-  # Add values where one isn't already set
-  for k, v in new_kwargs.items():
-    if k in kwargs and kwargs[k] is not None:
-      # It is set and not to None, don't override
-      continue
-    
-    kwargs[k] = v
-  
-  return subprocess.Popen(args, **kwargs)
-
 @contextlib.contextmanager
 def patch_popen():
   _old_popen = subprocess.Popen
+  
+  @functools.wraps(subprocess.Popen)
+  def popen_wrapper(args, **kwargs):
+    # The following is true only on Windows.
+    if hasattr(subprocess, 'STARTUPINFO'):
+      # On Windows, subprocess calls will pop up a command window by default
+      # when run from Pyinstaller with the ``--noconsole`` option. Avoid this
+      # distraction.
+      si = subprocess.STARTUPINFO()
+      si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+      # Windows doesn't search the path by default. Pass it an environment so
+      # it will.
+      env = os.environ
+    else:
+      si = None
+      env = None
+    
+    # On Windows, running this from the binary produced by Pyinstaller
+    # with the ``--noconsole`` option requires redirecting everything
+    # (stdin, stdout, stderr) to avoid an OSError exception
+    # "[Error 6] the handle is invalid."
+    new_kwargs = {
+      'stdin': subprocess.PIPE,
+      'stdout': subprocess.PIPE,
+      'stderr': subprocess.PIPE,
+      'startupinfo': si,
+      'env': env,
+    }
+    
+    # Add values where one isn't already set
+    for k, v in new_kwargs.items():
+      if k in kwargs and kwargs[k] is not None:
+        # It is set and not to None, don't override
+        continue
+      
+      kwargs[k] = v
+    
+    return _old_popen(args, **kwargs)
+  
   subprocess.Popen = popen_wrapper
   try:
     yield
