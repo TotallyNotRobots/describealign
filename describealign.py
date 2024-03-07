@@ -851,7 +851,7 @@ def write_replaced_media_to_disk(output_filename, media_arr, video_file=None, au
     ffmpeg_caller.wait()
   else:
     media_input = ffmpeg.input(audio_desc_file)
-    audio_desc_streams = ffmpeg.probe(audio_desc_file, cmd=get_ffprobe(), select_streams='a',
+    audio_desc_streams = ffmpeg_probe(audio_desc_file, cmd=get_ffprobe(), select_streams='a',
                                       show_entries='format=duration')['streams']
     audio_desc_duration = max([float(stream['duration']) for stream in audio_desc_streams])
     original_video = ffmpeg.input(video_file, an=None, ss=start_key_frame)
