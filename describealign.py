@@ -91,6 +91,13 @@ else:
   default_output_dir = os.path.expanduser('~') + '/videos_with_ad'
   default_alignment_dir = os.path.expanduser('~') + '/alignment_plots'
 
+_original_popen = subprocess.Popen
+def log_popen(*args, **kwargs):
+  print("popen", args, kwargs)
+  return _original_popen(*args, **kwargs)
+
+subprocess.Popen = log_popen
+
 @contextlib.contextmanager
 def patch_popen():
   _old_popen = subprocess.Popen
@@ -138,7 +145,7 @@ def patch_popen():
     yield
   finally:
     subprocess.Popen = _old_popen
-    
+
 def ffmpeg_probe(*args, **kwargs):
   with patch_popen():
     return ffmpeg.probe(*args, **kwargs)
