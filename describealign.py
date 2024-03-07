@@ -65,6 +65,8 @@ import sys
 from typing import Optional
 import numpy as np
 import ffmpeg
+from ffmpeg import run, run_async
+from ffmpeg.nodes import output_operator
 import platformdirs
 import static_ffmpeg
 import python_speech_features as psf
@@ -88,6 +90,68 @@ else:
   import PySimpleGUIQt as sg
   default_output_dir = os.path.expanduser('~') + '/videos_with_ad'
   default_alignment_dir = os.path.expanduser('~') + '/alignment_plots'
+
+@contextlib.contextmanager
+def patch_popen():
+  _old_popen = subprocess.Popen
+  
+  @functools.wraps(subprocess.Popen)
+  def popen_wrapper(args, **kwargs):
+    # The following is true only on Windows.
+    if hasattr(subprocess, 'STARTUPINFO'):
+      # On Windows, subprocess calls will pop up a command window by default
+      # when run from Pyinstaller with the ``--noconsole`` option. Avoid this
+      # distraction.
+      si = subprocess.STARTUPINFO()
+      si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+      # Windows doesn't search the path by default. Pass it an environment so
+      # it will.
+      env = os.environ
+    else:
+      si = None
+      env = None
+    
+    # On Windows, running this from the binary produced by Pyinstaller
+    # with the ``--noconsole`` option requires redirecting everything
+    # (stdin, stdout, stderr) to avoid an OSError exception
+    # "[Error 6] the handle is invalid."
+    new_kwargs = {
+      'stdin': subprocess.PIPE,
+      'stdout': subprocess.PIPE,
+      'stderr': subprocess.PIPE,
+      'startupinfo': si,
+      'env': env,
+    }
+    
+    # Add values where one isn't already set
+    for k, v in new_kwargs.items():
+      if k in kwargs and kwargs[k] is not None:
+        # It is set and not to None, don't override
+        continue
+      
+      kwargs[k] = v
+    
+    return _old_popen(args, **kwargs)
+  
+  subprocess.Popen = popen_wrapper
+  try:
+    yield
+  finally:
+    subprocess.Popen = _old_popen
+    
+def ffmpeg_probe(*args, **kwargs):
+  with patch_popen():
+    return ffmpeg.probe(*args, **kwargs)
+
+@output_operator('run_async')
+def ffmpeg_run_async(*args, **kwargs):
+  with patch_popen():
+    return ffmpeg.run_async(*args, **kwargs)
+
+@output_operator('run')
+def ffmpeg_run(*args, **kwargs):
+  with patch_popen():
+    return ffmpeg.run(*args, **kwargs)
 
 def display(text, func=None):
   if func:
@@ -712,54 +776,6 @@ def detect_describer(video_arr, video_spec, video_spec_raw, video_timings,
   
   return speech_sample_mask, boost_sample_mask, ad_timings
 
-@contextlib.contextmanager
-def patch_popen():
-  _old_popen = subprocess.Popen
-  
-  @functools.wraps(subprocess.Popen)
-  def popen_wrapper(args, **kwargs):
-    # The following is true only on Windows.
-    if hasattr(subprocess, 'STARTUPINFO'):
-      # On Windows, subprocess calls will pop up a command window by default
-      # when run from Pyinstaller with the ``--noconsole`` option. Avoid this
-      # distraction.
-      si = subprocess.STARTUPINFO()
-      si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-      # Windows doesn't search the path by default. Pass it an environment so
-      # it will.
-      env = os.environ
-    else:
-      si = None
-      env = None
-    
-    # On Windows, running this from the binary produced by Pyinstaller
-    # with the ``--noconsole`` option requires redirecting everything
-    # (stdin, stdout, stderr) to avoid an OSError exception
-    # "[Error 6] the handle is invalid."
-    new_kwargs = {
-      'stdin': subprocess.PIPE,
-      'stdout': subprocess.PIPE,
-      'stderr': subprocess.PIPE,
-      'startupinfo': si,
-      'env': env,
-    }
-    
-    # Add values where one isn't already set
-    for k, v in new_kwargs.items():
-      if k in kwargs and kwargs[k] is not None:
-        # It is set and not to None, don't override
-        continue
-      
-      kwargs[k] = v
-    
-    return _old_popen(args, **kwargs)
-  
-  subprocess.Popen = popen_wrapper
-  try:
-    yield
-  finally:
-    subprocess.Popen = _old_popen
-
 # Convert piece-wise linear fit to ffmpeg expression for editing video frame timestamps
 def encode_fit_as_ffmpeg_expr(smooth_path, clips, video_offset, start_key_frame):
   # PTS is the input frame's presentation timestamp, which is when frames are displayed
@@ -800,7 +816,7 @@ def get_ffprobe():
 def get_closest_key_frame_time(video_file, time):
   if time <= 0:
     return 0
-  key_frames = ffmpeg.probe(video_file, cmd=get_ffprobe(), select_streams='v',
+  key_frames = ffmpeg_probe(video_file, cmd=get_ffprobe(), select_streams='v',
                             show_frames=None, skip_frame='nokey')['frames']
   key_frame_times = np.array([float(frame['pts_time']) for frame in key_frames] + [0])
   return np.max(key_frame_times[key_frame_times <= time])
@@ -1329,15 +1345,5 @@ def command_line_interface():
 # allows the script to be run on its own, rather than through the package, for example:
 # python3 describealign.py video.mp4 audio_desc.mp3
 if __name__ == "__main__":
-  ### DANGER ###
-  ## This is super hacky and I never recommend doing this, it will likely break.
-  ## This is the only option until we replace `ffmpeg_python`, it is updated (unlikely), or some third thing
-  with patch_popen():
-    # At this point, subprocess.Popen has been replaced with a wrapper
-    # If something breaks in a subprocess, first disable this context manager and test again.
-    
-    # Allow multiprocessing to run this binary again to run functions in subprocesses
-    multiprocessing.freeze_support()
-    
-    # Run the CLI
-    command_line_interface()
+  multiprocessing.freeze_support()
+  command_line_interface()
