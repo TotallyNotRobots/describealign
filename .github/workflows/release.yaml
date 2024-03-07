@@ -1,12 +1,31 @@
 name: Release
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        required: true
+        description: "Version of the app to release"
 
 jobs:
+  set-version:
+    uses: ./.github/workflows/update-version.yaml
+    with:
+      version: "${{inputs.version}}"
+
   build:
+    needs: set-version
     uses: ./.github/workflows/build-binary.yaml
+
   release:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Download all workflow run artifacts
         uses: actions/download-artifact@v4
+
+  set-dev-version:
+    needs: release
+    uses: ./.github/workflows/update-version.yaml
+    with:
+      version: "${{inputs.version}}.git"

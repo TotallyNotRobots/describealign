@@ -31,3 +31,6 @@ jobs:
 
       - run: |
           ls . dist
+
+      - run: |
+          echo Upload $(cat version) to PyPi
