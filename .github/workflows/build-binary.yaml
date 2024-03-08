@@ -95,6 +95,7 @@ jobs:
 
       - name: Upload macOS installer
         uses: actions/upload-artifact@v4
+        if: ${{runner.os == 'macOS'}}
         with:
           name: ${{ runner.os }} installer
           path: |
