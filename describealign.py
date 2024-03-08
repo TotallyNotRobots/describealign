@@ -130,163 +130,163 @@ def make_subproc(args, **kwargs) -> subprocess.Popen[bytes]:
 
 # copy of ffmpeg.probe but with subprocess.Popen replaced with our wrapper
 def ffmpeg_probe(filename, cmd='ffprobe', **kwargs):
-    """Run ffprobe on the specified file and return a JSON representation of the output.
-
-    Raises:
-        :class:`ffmpeg.Error`: if ffprobe returns a non-zero exit code,
-            an :class:`Error` is returned with a generic error message.
-            The stderr output can be retrieved by accessing the
-            ``stderr`` property of the exception.
-    """
-    args = [cmd, '-show_format', '-show_streams', '-of', 'json']
-    args += ffmpeg._utils.convert_kwargs_to_cmd_line_args(kwargs)
-    args += [filename]
-
-    p = make_subproc(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    out, err = p.communicate()
-    if p.returncode != 0:
-        raise ffmpeg.Error('ffprobe', out, err)
-    return json.loads(out.decode('utf-8'))
+  """Run ffprobe on the specified file and return a JSON representation of the output.
+  
+  Raises:
+    :class:`ffmpeg.Error`: if ffprobe returns a non-zero exit code,
+      an :class:`Error` is returned with a generic error message.
+      The stderr output can be retrieved by accessing the
+      ``stderr`` property of the exception.
+  """
+  args = [cmd, '-show_format', '-show_streams', '-of', 'json']
+  args += ffmpeg._utils.convert_kwargs_to_cmd_line_args(kwargs)
+  args += [filename]
+  
+  p = make_subproc(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  out, err = p.communicate()
+  if p.returncode != 0:
+    raise ffmpeg.Error('ffprobe', out, err)
+  return json.loads(out.decode('utf-8'))
 
 ffmpeg.probe = ffmpeg_probe
 
 # Copy of ffmpeg.run_async that uses our Popen wrapper
 def ffmpeg_run_async(
-    stream_spec,
-    cmd='ffmpeg',
-    pipe_stdin=False,
-    pipe_stdout=False,
-    pipe_stderr=False,
-    quiet=False,
-    overwrite_output=False,
+  stream_spec,
+  cmd='ffmpeg',
+  pipe_stdin=False,
+  pipe_stdout=False,
+  pipe_stderr=False,
+  quiet=False,
+  overwrite_output=False,
 ):
-    """Asynchronously invoke ffmpeg for the supplied node graph.
-
-    Args:
-        pipe_stdin: if True, connect pipe to subprocess stdin (to be
-            used with ``pipe:`` ffmpeg inputs).
-        pipe_stdout: if True, connect pipe to subprocess stdout (to be
-            used with ``pipe:`` ffmpeg outputs).
-        pipe_stderr: if True, connect pipe to subprocess stderr.
-        quiet: shorthand for setting ``capture_stdout`` and
-            ``capture_stderr``.
-        **kwargs: keyword-arguments passed to ``get_args()`` (e.g.
-            ``overwrite_output=True``).
-
-    Returns:
-        A `subprocess Popen`_ object representing the child process.
-
-    Examples:
-        Run and stream input::
-
-            process = (
-                ffmpeg
-                .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(width, height))
-                .output(out_filename, pix_fmt='yuv420p')
-                .overwrite_output()
-                .run_async(pipe_stdin=True)
-            )
-            process.communicate(input=input_data)
-
-        Run and capture output::
-
-            process = (
-                ffmpeg
-                .input(in_filename)
-                .output('pipe':, format='rawvideo', pix_fmt='rgb24')
-                .run_async(pipe_stdout=True, pipe_stderr=True)
-            )
-            out, err = process.communicate()
-
-        Process video frame-by-frame using numpy::
-
-            process1 = (
-                ffmpeg
-                .input(in_filename)
-                .output('pipe:', format='rawvideo', pix_fmt='rgb24')
-                .run_async(pipe_stdout=True)
-            )
-
-            process2 = (
-                ffmpeg
-                .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(width, height))
-                .output(out_filename, pix_fmt='yuv420p')
-                .overwrite_output()
-                .run_async(pipe_stdin=True)
-            )
-
-            while True:
-                in_bytes = process1.stdout.read(width * height * 3)
-                if not in_bytes:
-                    break
-                in_frame = (
-                    np
-                    .frombuffer(in_bytes, np.uint8)
-                    .reshape([height, width, 3])
-                )
-                out_frame = in_frame * 0.3
-                process2.stdin.write(
-                    frame
-                    .astype(np.uint8)
-                    .tobytes()
-                )
-
-            process2.stdin.close()
-            process1.wait()
-            process2.wait()
-
-    .. _subprocess Popen: https://docs.python.org/3/library/subprocess.html#popen-objects
-    """
-    args = ffmpeg.compile(stream_spec, cmd, overwrite_output=overwrite_output)
-    stdin_stream = subprocess.PIPE if pipe_stdin else None
-    stdout_stream = subprocess.PIPE if pipe_stdout or quiet else None
-    stderr_stream = subprocess.PIPE if pipe_stderr or quiet else None
-    return make_subproc(
-        args, stdin=stdin_stream, stdout=stdout_stream, stderr=stderr_stream
-    )
+  """Asynchronously invoke ffmpeg for the supplied node graph.
+  
+  Args:
+    pipe_stdin: if True, connect pipe to subprocess stdin (to be
+      used with ``pipe:`` ffmpeg inputs).
+    pipe_stdout: if True, connect pipe to subprocess stdout (to be
+      used with ``pipe:`` ffmpeg outputs).
+    pipe_stderr: if True, connect pipe to subprocess stderr.
+    quiet: shorthand for setting ``capture_stdout`` and
+      ``capture_stderr``.
+    **kwargs: keyword-arguments passed to ``get_args()`` (e.g.
+      ``overwrite_output=True``).
+  
+  Returns:
+    A `subprocess Popen`_ object representing the child process.
+  
+  Examples:
+    Run and stream input::
     
+      process = (
+        ffmpeg
+        .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(width, height))
+        .output(out_filename, pix_fmt='yuv420p')
+        .overwrite_output()
+        .run_async(pipe_stdin=True)
+      )
+      process.communicate(input=input_data)
+    
+    Run and capture output::
+    
+      process = (
+        ffmpeg
+        .input(in_filename)
+        .output('pipe':, format='rawvideo', pix_fmt='rgb24')
+        .run_async(pipe_stdout=True, pipe_stderr=True)
+      )
+      out, err = process.communicate()
+    
+    Process video frame-by-frame using numpy::
+    
+      process1 = (
+        ffmpeg
+        .input(in_filename)
+        .output('pipe:', format='rawvideo', pix_fmt='rgb24')
+        .run_async(pipe_stdout=True)
+      )
+      
+      process2 = (
+        ffmpeg
+        .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(width, height))
+        .output(out_filename, pix_fmt='yuv420p')
+        .overwrite_output()
+        .run_async(pipe_stdin=True)
+      )
+      
+      while True:
+        in_bytes = process1.stdout.read(width * height * 3)
+        if not in_bytes:
+          break
+        in_frame = (
+          np
+          .frombuffer(in_bytes, np.uint8)
+          .reshape([height, width, 3])
+        )
+        out_frame = in_frame * 0.3
+        process2.stdin.write(
+          frame
+          .astype(np.uint8)
+          .tobytes()
+        )
+        
+      process2.stdin.close()
+      process1.wait()
+      process2.wait()
+
+  .. _subprocess Popen: https://docs.python.org/3/library/subprocess.html#popen-objects
+  """
+  args = ffmpeg.compile(stream_spec, cmd, overwrite_output=overwrite_output)
+  stdin_stream = subprocess.PIPE if pipe_stdin else None
+  stdout_stream = subprocess.PIPE if pipe_stdout or quiet else None
+  stderr_stream = subprocess.PIPE if pipe_stderr or quiet else None
+  return make_subproc(
+    args, stdin=stdin_stream, stdout=stdout_stream, stderr=stderr_stream
+  )
+
 # Replace the library method and register it for Node.run_async() calls
 ffmpeg.run_async = ffmpeg_run_async
 output_operator('run_async')(ffmpeg_run_async)
 
 # Copy of ffmpeg.run that uses our Popen wrapper
 def ffmpeg_run(
-    stream_spec,
-    cmd='ffmpeg',
-    capture_stdout=False,
-    capture_stderr=False,
-    input=None,
-    quiet=False,
-    overwrite_output=False,
+  stream_spec,
+  cmd='ffmpeg',
+  capture_stdout=False,
+  capture_stderr=False,
+  input=None,
+  quiet=False,
+  overwrite_output=False,
 ):
-    """Invoke ffmpeg for the supplied node graph.
-
-    Args:
-        capture_stdout: if True, capture stdout (to be used with
-            ``pipe:`` ffmpeg outputs).
-        capture_stderr: if True, capture stderr.
-        quiet: shorthand for setting ``capture_stdout`` and ``capture_stderr``.
-        input: text to be sent to stdin (to be used with ``pipe:``
-            ffmpeg inputs)
-        **kwargs: keyword-arguments passed to ``get_args()`` (e.g.
-            ``overwrite_output=True``).
-
-    Returns: (out, err) tuple containing captured stdout and stderr data.
-    """
-    process = ffmpeg_run_async(
-        stream_spec,
-        cmd,
-        pipe_stdin=input is not None,
-        pipe_stdout=capture_stdout,
-        pipe_stderr=capture_stderr,
-        quiet=quiet,
-        overwrite_output=overwrite_output,
-    )
-    out, err = process.communicate(input)
-    retcode = process.poll()
-    if retcode:
-        raise ffmpeg.Error('ffmpeg', out, err)
-    return out, err
+  """Invoke ffmpeg for the supplied node graph.
+  
+  Args:
+    capture_stdout: if True, capture stdout (to be used with
+      ``pipe:`` ffmpeg outputs).
+    capture_stderr: if True, capture stderr.
+    quiet: shorthand for setting ``capture_stdout`` and ``capture_stderr``.
+    input: text to be sent to stdin (to be used with ``pipe:``
+      ffmpeg inputs)
+    **kwargs: keyword-arguments passed to ``get_args()`` (e.g.
+      ``overwrite_output=True``).
+  
+  Returns: (out, err) tuple containing captured stdout and stderr data.
+  """
+  process = ffmpeg_run_async(
+    stream_spec,
+    cmd,
+    pipe_stdin=input is not None,
+    pipe_stdout=capture_stdout,
+    pipe_stderr=capture_stderr,
+    quiet=quiet,
+    overwrite_output=overwrite_output,
+  )
+  out, err = process.communicate(input)
+  retcode = process.poll()
+  if retcode:
+    raise ffmpeg.Error('ffmpeg', out, err)
+  return out, err
 
 ffmpeg.run = ffmpeg_run
 output_operator('run')(ffmpeg_run)
@@ -954,7 +954,7 @@ def get_ffprobe():
 def get_closest_key_frame_time(video_file, time):
   if time <= 0:
     return 0
-  key_frames = ffmpeg_probe(video_file, cmd=get_ffprobe(), select_streams='v',
+  key_frames = ffmpeg.probe(video_file, cmd=get_ffprobe(), select_streams='v',
                             show_frames=None, skip_frame='nokey')['frames']
   key_frame_times = np.array([float(frame['pts_time']) for frame in key_frames] + [0])
   return np.max(key_frame_times[key_frame_times <= time])
@@ -982,7 +982,7 @@ def write_replaced_media_to_disk(output_filename, media_arr, video_file=None, au
     ffmpeg_caller.wait()
   else:
     media_input = ffmpeg.input(audio_desc_file)
-    audio_desc_streams = ffmpeg_probe(audio_desc_file, cmd=get_ffprobe(), select_streams='a',
+    audio_desc_streams = ffmpeg.probe(audio_desc_file, cmd=get_ffprobe(), select_streams='a',
                                       show_entries='format=duration')['streams']
     audio_desc_duration = max([float(stream['duration']) for stream in audio_desc_streams])
     original_video = ffmpeg.input(video_file, an=None, ss=start_key_frame)
@@ -1279,7 +1279,7 @@ def combine_gui(video_files, audio_files, config_path):
             [sg.Button('Close', pad=(360,5))]]
   combine_window = sg.Window('Combining - describealign', layout, font=('Arial', 16),
                              disable_close=True, finalize=True)
-  output_textbox.update('Combining media files:\n', append=True)
+  output_textbox.update('Combining media files:', append=True)
   print_queue = multiprocessing.Queue()
   
   settings = read_config_file(config_path)
@@ -1295,8 +1295,7 @@ def combine_gui(video_files, audio_files, config_path):
     if not print_queue.empty():
       if IS_RUNNING_WINDOWS:
         cursor_position = output_textbox.WxTextCtrl.GetInsertionPoint()
-      while not print_queue.empty():
-          output_textbox.update(print_queue.get(), append=True)
+      output_textbox.update(print_queue.get(), append=True)
       if IS_RUNNING_WINDOWS:
         output_textbox.WxTextCtrl.SetInsertionPoint(cursor_position)
     event, values = combine_window.read(timeout=100)
@@ -1485,3 +1484,7 @@ def command_line_interface():
 if __name__ == "__main__":
   multiprocessing.freeze_support()
   command_line_interface()
+
+
+
+
