@@ -53,9 +53,8 @@ if PLOT_ALIGNMENT_TO_FILE:
   import matplotlib.pyplot as plt
 import argparse
 from contextlib import redirect_stderr, redirect_stdout
-import contextlib
-import functools
 import io
+import json
 import os
 import glob
 import itertools
@@ -65,8 +64,8 @@ import sys
 from typing import Optional
 import numpy as np
 import ffmpeg
-from ffmpeg import run, run_async
 from ffmpeg.nodes import output_operator
+import ffmpeg._utils
 import platformdirs
 import static_ffmpeg
 import python_speech_features as psf
@@ -91,67 +90,206 @@ else:
   default_output_dir = os.path.expanduser('~') + '/videos_with_ad'
   default_alignment_dir = os.path.expanduser('~') + '/alignment_plots'
 
-@contextlib.contextmanager
-def patch_popen():
-  _old_popen = subprocess.Popen
+# Based on https://github.com/pyinstaller/pyinstaller/wiki/Recipe-subprocess
+def make_subproc(args, **kwargs) -> subprocess.Popen[bytes]:
+  # The following is true only on Windows.
+  if hasattr(subprocess, 'STARTUPINFO'):
+    # On Windows, subprocess calls will pop up a command window by default
+    # when run from Pyinstaller with the ``--noconsole`` option. Avoid this
+    # distraction.
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    # Windows doesn't search the path by default. Pass it an environment so
+    # it will.
+    env = os.environ
+  else:
+    si = None
+    env = None
   
-  @functools.wraps(subprocess.Popen)
-  def popen_wrapper(args, **kwargs):
-    # The following is true only on Windows.
-    if hasattr(subprocess, 'STARTUPINFO'):
-      # On Windows, subprocess calls will pop up a command window by default
-      # when run from Pyinstaller with the ``--noconsole`` option. Avoid this
-      # distraction.
-      si = subprocess.STARTUPINFO()
-      si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-      # Windows doesn't search the path by default. Pass it an environment so
-      # it will.
-      env = os.environ
-    else:
-      si = None
-      env = None
-    
-    # On Windows, running this from the binary produced by Pyinstaller
-    # with the ``--noconsole`` option requires redirecting everything
-    # (stdin, stdout, stderr) to avoid an OSError exception
-    # "[Error 6] the handle is invalid."
-    new_kwargs = {
-      'stdin': subprocess.PIPE,
-      'stdout': subprocess.PIPE,
-      'stderr': subprocess.PIPE,
-      'startupinfo': si,
-      'env': env,
-    }
-    
-    # Add values where one isn't already set
-    for k, v in new_kwargs.items():
-      if k in kwargs and kwargs[k] is not None:
-        # It is set and not to None, don't override
-        continue
-      
-      kwargs[k] = v
-    
-    return _old_popen(args, **kwargs)
+  # On Windows, running this from the binary produced by Pyinstaller
+  # with the ``--noconsole`` option requires redirecting everything
+  # (stdin, stdout, stderr) to avoid an OSError exception
+  # "[Error 6] the handle is invalid."
+  new_kwargs = {
+    'stdin': subprocess.PIPE,
+    'stdout': subprocess.PIPE,
+    'stderr': subprocess.PIPE,
+    'startupinfo': si,
+    'env': env,
+  }
   
-  subprocess.Popen = popen_wrapper
-  try:
-    yield
-  finally:
-    subprocess.Popen = _old_popen
+  # Add values where one isn't already set
+  for k, v in new_kwargs.items():
+    if k in kwargs and kwargs[k] is not None:
+      # It is set and not to None, don't override
+      continue
+    
+    kwargs[k] = v
+  
+  return subprocess.Popen(args, text=False, encoding=None, errors=None, universal_newlines=False, **kwargs)
 
-def ffmpeg_probe(*args, **kwargs):
-  with patch_popen():
-    return ffmpeg.probe(*args, **kwargs)
+# copy of ffmpeg.probe but with subprocess.Popen replaced with our wrapper
+def ffmpeg_probe(filename, cmd='ffprobe', **kwargs):
+    """Run ffprobe on the specified file and return a JSON representation of the output.
 
-@output_operator('run_async')
-def ffmpeg_run_async(*args, **kwargs):
-  with patch_popen():
-    return ffmpeg.run_async(*args, **kwargs)
+    Raises:
+        :class:`ffmpeg.Error`: if ffprobe returns a non-zero exit code,
+            an :class:`Error` is returned with a generic error message.
+            The stderr output can be retrieved by accessing the
+            ``stderr`` property of the exception.
+    """
+    args = [cmd, '-show_format', '-show_streams', '-of', 'json']
+    args += ffmpeg._utils.convert_kwargs_to_cmd_line_args(kwargs)
+    args += [filename]
 
-@output_operator('run')
-def ffmpeg_run(*args, **kwargs):
-  with patch_popen():
-    return ffmpeg.run(*args, **kwargs)
+    p = make_subproc(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out, err = p.communicate()
+    if p.returncode != 0:
+        raise ffmpeg.Error('ffprobe', out, err)
+    return json.loads(out.decode('utf-8'))
+
+ffmpeg.probe = ffmpeg_probe
+
+# Copy of ffmpeg.run_async that uses our Popen wrapper
+def ffmpeg_run_async(
+    stream_spec,
+    cmd='ffmpeg',
+    pipe_stdin=False,
+    pipe_stdout=False,
+    pipe_stderr=False,
+    quiet=False,
+    overwrite_output=False,
+):
+    """Asynchronously invoke ffmpeg for the supplied node graph.
+
+    Args:
+        pipe_stdin: if True, connect pipe to subprocess stdin (to be
+            used with ``pipe:`` ffmpeg inputs).
+        pipe_stdout: if True, connect pipe to subprocess stdout (to be
+            used with ``pipe:`` ffmpeg outputs).
+        pipe_stderr: if True, connect pipe to subprocess stderr.
+        quiet: shorthand for setting ``capture_stdout`` and
+            ``capture_stderr``.
+        **kwargs: keyword-arguments passed to ``get_args()`` (e.g.
+            ``overwrite_output=True``).
+
+    Returns:
+        A `subprocess Popen`_ object representing the child process.
+
+    Examples:
+        Run and stream input::
+
+            process = (
+                ffmpeg
+                .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(width, height))
+                .output(out_filename, pix_fmt='yuv420p')
+                .overwrite_output()
+                .run_async(pipe_stdin=True)
+            )
+            process.communicate(input=input_data)
+
+        Run and capture output::
+
+            process = (
+                ffmpeg
+                .input(in_filename)
+                .output('pipe':, format='rawvideo', pix_fmt='rgb24')
+                .run_async(pipe_stdout=True, pipe_stderr=True)
+            )
+            out, err = process.communicate()
+
+        Process video frame-by-frame using numpy::
+
+            process1 = (
+                ffmpeg
+                .input(in_filename)
+                .output('pipe:', format='rawvideo', pix_fmt='rgb24')
+                .run_async(pipe_stdout=True)
+            )
+
+            process2 = (
+                ffmpeg
+                .input('pipe:', format='rawvideo', pix_fmt='rgb24', s='{}x{}'.format(width, height))
+                .output(out_filename, pix_fmt='yuv420p')
+                .overwrite_output()
+                .run_async(pipe_stdin=True)
+            )
+
+            while True:
+                in_bytes = process1.stdout.read(width * height * 3)
+                if not in_bytes:
+                    break
+                in_frame = (
+                    np
+                    .frombuffer(in_bytes, np.uint8)
+                    .reshape([height, width, 3])
+                )
+                out_frame = in_frame * 0.3
+                process2.stdin.write(
+                    frame
+                    .astype(np.uint8)
+                    .tobytes()
+                )
+
+            process2.stdin.close()
+            process1.wait()
+            process2.wait()
+
+    .. _subprocess Popen: https://docs.python.org/3/library/subprocess.html#popen-objects
+    """
+    args = ffmpeg.compile(stream_spec, cmd, overwrite_output=overwrite_output)
+    stdin_stream = subprocess.PIPE if pipe_stdin else None
+    stdout_stream = subprocess.PIPE if pipe_stdout or quiet else None
+    stderr_stream = subprocess.PIPE if pipe_stderr or quiet else None
+    return make_subproc(
+        args, stdin=stdin_stream, stdout=stdout_stream, stderr=stderr_stream
+    )
+    
+# Replace the library method and register it for Node.run_async() calls
+ffmpeg.run_async = ffmpeg_run_async
+output_operator('run_async')(ffmpeg_run_async)
+
+# Copy of ffmpeg.run that uses our Popen wrapper
+def ffmpeg_run(
+    stream_spec,
+    cmd='ffmpeg',
+    capture_stdout=False,
+    capture_stderr=False,
+    input=None,
+    quiet=False,
+    overwrite_output=False,
+):
+    """Invoke ffmpeg for the supplied node graph.
+
+    Args:
+        capture_stdout: if True, capture stdout (to be used with
+            ``pipe:`` ffmpeg outputs).
+        capture_stderr: if True, capture stderr.
+        quiet: shorthand for setting ``capture_stdout`` and ``capture_stderr``.
+        input: text to be sent to stdin (to be used with ``pipe:``
+            ffmpeg inputs)
+        **kwargs: keyword-arguments passed to ``get_args()`` (e.g.
+            ``overwrite_output=True``).
+
+    Returns: (out, err) tuple containing captured stdout and stderr data.
+    """
+    process = ffmpeg_run_async(
+        stream_spec,
+        cmd,
+        pipe_stdin=input is not None,
+        pipe_stdout=capture_stdout,
+        pipe_stderr=capture_stderr,
+        quiet=quiet,
+        overwrite_output=overwrite_output,
+    )
+    out, err = process.communicate(input)
+    retcode = process.poll()
+    if retcode:
+        raise ffmpeg.Error('ffmpeg', out, err)
+    return out, err
+
+ffmpeg.run = ffmpeg_run
+output_operator('run')(ffmpeg_run)
 
 def display(text, func=None):
   if func:
