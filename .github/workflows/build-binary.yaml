@@ -82,13 +82,21 @@ jobs:
           directory: dist
           path: describealign
           filename: 'describealign.zip'
-    
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ runner.os }} Build
           path: |
-            dist/*.pkg
+            dist/*.app
             dist/*.tar.gz
             dist/*.zip
+          if-no-files-found: error
+
+      - name: Upload macOS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ runner.os }} installer
+          path: |
+            dist/*.pkg
           if-no-files-found: error
