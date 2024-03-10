@@ -5,14 +5,16 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [macos-12, ubuntu-latest, windows-latest]
+        python-version:
+          - "3.8"
+        os:
+          - macos-11
+          - ubuntu-latest
+          - windows-latest
 
     runs-on: ${{ matrix.os }}
 
     steps:
-      - run: |
-          python3 --version
-      
       - name: Install Linux packages
         if: ${{ runner.os == 'Linux' }}
         run: |
@@ -30,11 +32,20 @@ jobs:
       - name: Check-out repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Setup Python (macOS)
+        uses: gabrielfalcao/pyenv-action@v18
+        if: ${{runner.os == 'macOS'}}
+        with:
+          default: "${{ matrix.python-version }}"
+          command: pip install -U pip wheel # upgrade pip after installing python
+        env:
+          PYTHON_CONFIGURE_OPTS: "--enable-framework"
+
+      - name: Setup Python (Windows/Linux)
         if: ${{ runner.os != 'macOS'}}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.8" # Version range or exact version of a Python version to use, using SemVer's version range syntax
+          python-version: "${{matrix.python-version}}"
           architecture: "x64" # optional x64 or x86. Defaults to x64 if not specified
           cache: "pip"
           cache-dependency-path: |
@@ -81,10 +92,10 @@ jobs:
         if: ${{ runner.os == 'Windows' }}
         uses: thedoctor0/zip-release@0.7.5
         with:
-          type: 'zip'
+          type: "zip"
           directory: dist
           path: describealign
-          filename: 'describealign.zip'
+          filename: "describealign.zip"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
