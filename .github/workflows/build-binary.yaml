@@ -5,11 +5,14 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [macos-11, ubuntu-latest, windows-latest]
+        os: [macos-12, ubuntu-latest, windows-latest]
 
     runs-on: ${{ matrix.os }}
 
     steps:
+      - run: |
+          python3 --version
+      
       - name: Install Linux packages
         if: ${{ runner.os == 'Linux' }}
         run: |
@@ -39,8 +42,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install -U pip wheel
-          pip install -U -r requirements.txt -r build-requirements.txt
+          pip3 install -U pip wheel
+          pip3 install -U -r requirements.txt -r build-requirements.txt
 
       - name: Set build vars
         id: build-vars
