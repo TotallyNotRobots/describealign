@@ -35,8 +35,6 @@ jobs:
       - name: Setup Python (macOS)
         if: ${{runner.os == 'macOS'}}
         run: |
-          brew install gettext
-          brew link gettext --force
           brew install -s python@${{matrix.python-version}}
           echo "$(brew --prefix python@${{matrix.python-version}})/libexec/bin" >> $GITHUB_PATH
 
@@ -53,10 +51,7 @@ jobs:
       - name: Install Dependencies
         run: |
           pip3 install -U wheel
-          pip3 install -U -r requirements.txt -r build-requirements.txt
-        env:
-          MACOSX_DEPLOYMENT_TARGET: "10.15"
-  
+          pip3 install -U -r requirements.txt -r build-requirements.txt  
 
       - name: Set build vars
         id: build-vars
@@ -67,7 +62,6 @@ jobs:
           pyinstaller describealign.spec
         env:
           APP_VERSION: ${{ steps.build-vars.outputs.version }}
-          MACOSX_DEPLOYMENT_TARGET: "10.15"  
 
       - name: Build artifacts
         if: ${{ runner.os == 'macOS' }}
