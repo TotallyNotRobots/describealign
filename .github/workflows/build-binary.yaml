@@ -36,6 +36,8 @@ jobs:
         if: ${{runner.os == 'macOS'}}
         run: |
           brew install -s python@${{matrix.python-version}}
+          brew install gettext
+          brew link gettext --force
           echo "$(brew --prefix python@${{matrix.python-version}})/libexec/bin" >> $GITHUB_PATH
         env:
           MACOSX_DEPLOYMENT_TARGET: "10.15"
