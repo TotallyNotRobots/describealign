@@ -6,7 +6,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=['gettext'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -42,10 +42,16 @@ coll = COLLECT(
     upx_exclude=[],
     name='describealign',
 )
+
+extra = {}
+version = os.getenv('APP_VERSION')
+if version:
+    extra['version'] = version
+
 app = BUNDLE(
     coll,
     name='describealign.app',
     icon='describealign.png',
     bundle_identifier=None,
-    version=os.getenv('APP_VERSION'),
+    **extra,
 )
