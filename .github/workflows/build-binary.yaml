@@ -35,12 +35,10 @@ jobs:
       - name: Setup Python (macOS)
         if: ${{runner.os == 'macOS'}}
         run: |
-          brew install -s python@${{matrix.python-version}}
           brew install gettext
           brew link gettext --force
+          brew install -s python@${{matrix.python-version}}
           echo "$(brew --prefix python@${{matrix.python-version}})/libexec/bin" >> $GITHUB_PATH
-        env:
-          MACOSX_DEPLOYMENT_TARGET: "10.15"
 
       - name: Setup Python (Windows/Linux)
         if: ${{ runner.os != 'macOS'}}
