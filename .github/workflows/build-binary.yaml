@@ -32,16 +32,7 @@ jobs:
       - name: Check-out repository
         uses: actions/checkout@v4
 
-      - name: Setup Python (macOS)
-        if: ${{runner.os == 'macOS'}}
-        run: |
-          brew install -s python@${{matrix.python-version}}
-          echo "$(brew --prefix python@${{matrix.python-version}})/libexec/bin" >> $GITHUB_PATH
-        env:
-          MACOSX_DEPLOYMENT_TARGET: "10.13"
-
       - name: Setup Python (Windows/Linux)
-        if: ${{ runner.os != 'macOS'}}
         uses: actions/setup-python@v5
         with:
           python-version: "${{matrix.python-version}}"
